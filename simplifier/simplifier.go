@@ -14,7 +14,6 @@ import (
 	"github.com/nukilabs/unicodeid"
 	"github.com/t14raptor/go-fast/ast"
 	"github.com/t14raptor/go-fast/ast/ext"
-	"github.com/t14raptor/go-fast/token"
 )
 
 var asciiStart, asciiContinue [128]bool
@@ -176,7 +175,7 @@ func (s *simplifier) optimizeMemberExpression(expr *ast.Expression) {
 			var v ast.Expression
 			if e.IsNone() {
 				v = ast.NewUnaryExpr(&ast.UnaryExpression{
-					Idx: memExpr.Idx0(), Operator: token.Void,
+					Idx: memExpr.Idx0(), Operator: ast.UnaryVoid,
 					Operand: ptrExpr(ast.NewNumLitExpr(&ast.NumberLiteral{Idx: memExpr.Idx0(), Value: 0.0})),
 				})
 			} else {
@@ -250,7 +249,7 @@ func (s *simplifier) optimizeBinaryExpression(expr *ast.Expression) {
 	}
 
 	switch binExpr.Operator {
-	case token.Plus:
+	case ast.BinaryAddition:
 		if ext.IsString(binExpr.Left) || ext.IsArrayLiteral(binExpr.Left) || ext.IsString(binExpr.Right) || ext.IsArrayLiteral(binExpr.Right) {
 			l := ext.AsPureString(binExpr.Left)
 			r := ext.AsPureString(binExpr.Right)
@@ -274,49 +273,11 @@ func (s *simplifier) optimizeBinaryExpression(expr *ast.Expression) {
 				}
 			}
 		case ext.BoolType, ext.NullType, ext.NumberType, ext.UndefinedType:
-			if v := s.performArithmeticOp(token.Plus, binExpr.Left, binExpr.Right); v.Known() {
+			if v := s.performArithmeticOp(ast.BinaryAddition, binExpr.Left, binExpr.Right); v.Known() {
 				tryReplaceNum(v.Val(), binExpr.Left, binExpr.Right)
 			}
 		}
-	case token.LogicalAnd, token.LogicalOr:
-		val, _ := ext.CastToBool(binExpr.Left)
-		if val.Known() {
-			var node ast.Expression
-			if binExpr.Operator == token.LogicalAnd {
-				if val.Val() {
-					node = *binExpr.Right
-				} else {
-					s.changed = true
-					*expr = *binExpr.Left
-					return
-				}
-			} else {
-				if val.Val() {
-					s.changed = true
-					*expr = *binExpr.Left
-					return
-				} else {
-					node = *binExpr.Right
-				}
-			}
-			if !ext.MayHaveSideEffects(binExpr.Left) {
-				s.changed = true
-				if directnessMaters(&node) {
-					*expr = ast.NewSequenceExpr(&ast.SequenceExpression{
-						Sequence: []ast.Expression{ast.NewNumLitExpr(&ast.NumberLiteral{Value: 0.0}), node},
-					})
-				} else {
-					*expr = node
-				}
-			} else {
-				s.changed = true
-				seq := &ast.SequenceExpression{Sequence: []ast.Expression{*binExpr.Left, node}}
-				seqExpr := ast.NewSequenceExpr(seq)
-				seqExpr.VisitWith(s)
-				*expr = seqExpr
-			}
-		}
-	case token.InstanceOf:
+	case ast.BinaryInstanceof:
 		if isNonObj(binExpr.Left) {
 			s.changed = true
 			*expr = makeBoolExpr(false, []ast.Expression{*binExpr.Right})
@@ -326,12 +287,12 @@ func (s *simplifier) optimizeBinaryExpression(expr *ast.Expression) {
 			s.changed = true
 			*expr = makeBoolExpr(true, []ast.Expression{*binExpr.Left})
 		}
-	case token.Minus, token.Slash, token.Remainder, token.Exponent:
+	case ast.BinarySubtraction, ast.BinaryDivision, ast.BinaryRemainder, ast.BinaryExponential:
 		if v := s.performArithmeticOp(binExpr.Operator, binExpr.Left, binExpr.Right); v.Known() {
 			tryReplaceNum(v.Val(), binExpr.Left, binExpr.Right)
 		}
-	case token.ShiftLeft, token.ShiftRight, token.UnsignedShiftRight:
-		tryFoldShift := func(op token.Token, left, right *ast.Expression) (float64, bool) {
+	case ast.BinaryShiftLeft, ast.BinaryShiftRight, ast.BinaryUnsignedShiftRight:
+		tryFoldShift := func(op ast.BinaryOperator, left, right *ast.Expression) (float64, bool) {
 			if !left.IsNumLit() || !right.IsNumLit() {
 				return 0, false
 			}
@@ -341,11 +302,11 @@ func (s *simplifier) optimizeBinaryExpression(expr *ast.Expression) {
 				return 0, false
 			}
 			switch op {
-			case token.ShiftLeft:
+			case ast.BinaryShiftLeft:
 				return float64(toInt32(lv.Val()) << (toUint32(rv.Val()) & 0x1f)), true
-			case token.ShiftRight:
+			case ast.BinaryShiftRight:
 				return float64(toInt32(lv.Val()) >> (toUint32(rv.Val()) & 0x1f)), true
-			case token.UnsignedShiftRight:
+			case ast.BinaryUnsignedShiftRight:
 				return float64(toUint32(lv.Val()) >> (toUint32(rv.Val()) & 0x1f)), true
 			}
 			return 0, false
@@ -353,7 +314,7 @@ func (s *simplifier) optimizeBinaryExpression(expr *ast.Expression) {
 		if v, ok := tryFoldShift(binExpr.Operator, binExpr.Left, binExpr.Right); ok {
 			tryReplaceNum(v, binExpr.Left, binExpr.Right)
 		}
-	case token.Multiply, token.And, token.Or, token.ExclusiveOr:
+	case ast.BinaryMultiplication, ast.BinaryBitwiseAnd, ast.BinaryBitwiseOR, ast.BinaryBitwiseXOR:
 		if v := s.performArithmeticOp(binExpr.Operator, binExpr.Left, binExpr.Right); v.Known() {
 			tryReplaceNum(v.Val(), binExpr.Left, binExpr.Right)
 		}
@@ -370,44 +331,91 @@ func (s *simplifier) optimizeBinaryExpression(expr *ast.Expression) {
 				*binExpr.Right = valExpr
 			}
 		}
-	case token.Less:
+	case ast.BinaryLessThan:
 		if v := s.performAbstractRelCmp(binExpr.Left, binExpr.Right, false); v.Known() {
 			tryReplaceBool(v.Val(), binExpr.Left, binExpr.Right)
 		}
-	case token.Greater:
+	case ast.BinaryGreaterThan:
 		if v := s.performAbstractRelCmp(binExpr.Right, binExpr.Left, false); v.Known() {
 			tryReplaceBool(v.Val(), binExpr.Right, binExpr.Left)
 		}
-	case token.LessOrEqual:
+	case ast.BinaryLessEqualThan:
 		if v := s.performAbstractRelCmp(binExpr.Right, binExpr.Left, true).Not(); v.Known() {
 			tryReplaceBool(v.Val(), binExpr.Right, binExpr.Left)
 		}
-	case token.GreaterOrEqual:
+	case ast.BinaryGreaterEqualThan:
 		if v := s.performAbstractRelCmp(binExpr.Left, binExpr.Right, true).Not(); v.Known() {
 			tryReplaceBool(v.Val(), binExpr.Left, binExpr.Right)
 		}
-	case token.Equal:
+	case ast.BinaryEquality:
 		if v := s.performAbstractEqCmp(binExpr.Left, binExpr.Right); v.Known() {
 			tryReplaceBool(v.Val(), binExpr.Left, binExpr.Right)
 		}
-	case token.NotEqual:
+	case ast.BinaryInequality:
 		if v := s.performAbstractEqCmp(binExpr.Left, binExpr.Right).Not(); v.Known() {
 			tryReplaceBool(v.Val(), binExpr.Left, binExpr.Right)
 		}
-	case token.StrictEqual:
+	case ast.BinaryStrictEquality:
 		if v := s.performStrictEqCmp(binExpr.Left, binExpr.Right); v.Known() {
 			tryReplaceBool(v.Val(), binExpr.Left, binExpr.Right)
 		}
-	case token.StrictNotEqual:
+	case ast.BinaryStrictInequality:
 		if v := s.performStrictEqCmp(binExpr.Left, binExpr.Right).Not(); v.Known() {
 			tryReplaceBool(v.Val(), binExpr.Left, binExpr.Right)
 		}
 	}
 }
 
+func (s *simplifier) optimizeLogicalExpression(expr *ast.Expression) {
+	logExpr, ok := expr.Logical()
+	if !ok {
+		return
+	}
+
+	val, _ := ext.CastToBool(logExpr.Left)
+	if val.Unknown() {
+		return
+	}
+
+	var node ast.Expression
+	if logExpr.Operator == ast.LogicalAnd {
+		if val.Val() {
+			node = *logExpr.Right
+		} else {
+			s.changed = true
+			*expr = *logExpr.Left
+			return
+		}
+	} else {
+		if val.Val() {
+			s.changed = true
+			*expr = *logExpr.Left
+			return
+		} else {
+			node = *logExpr.Right
+		}
+	}
+	if !ext.MayHaveSideEffects(logExpr.Left) {
+		s.changed = true
+		if directnessMaters(&node) {
+			*expr = ast.NewSequenceExpr(&ast.SequenceExpression{
+				Sequence: []ast.Expression{ast.NewNumLitExpr(&ast.NumberLiteral{Value: 0.0}), node},
+			})
+		} else {
+			*expr = node
+		}
+	} else {
+		s.changed = true
+		seq := &ast.SequenceExpression{Sequence: []ast.Expression{*logExpr.Left, node}}
+		seqExpr := ast.NewSequenceExpr(seq)
+		seqExpr.VisitWith(s)
+		*expr = seqExpr
+	}
+}
+
 func (s *simplifier) tryFoldTypeOf(expr *ast.Expression) {
 	unary, ok := expr.Unary()
-	if !ok || unary.Operator != token.Typeof {
+	if !ok || unary.Operator != ast.UnaryTypeof {
 		return
 	}
 	var val string
@@ -423,7 +431,7 @@ func (s *simplifier) tryFoldTypeOf(expr *ast.Expression) {
 	case ast.ExprNullLit, ast.ExprObjLit, ast.ExprArrLit:
 		val = "object"
 	case ast.ExprUnary:
-		if unary.Operand.MustUnary().Operator == token.Void {
+		if unary.Operand.MustUnary().Operator == ast.UnaryVoid {
 			val = "undefined"
 		} else {
 			return
@@ -449,11 +457,11 @@ func (s *simplifier) optimizeUnaryExpression(expr *ast.Expression) {
 	sideEffects := ext.MayHaveSideEffects(unaryExpr.Operand)
 
 	switch unaryExpr.Operator {
-	case token.Typeof:
+	case ast.UnaryTypeof:
 		if !sideEffects {
 			s.tryFoldTypeOf(expr)
 		}
-	case token.Not:
+	case ast.UnaryLogicalNot:
 		switch unaryExpr.Operand.Kind() {
 		case ast.ExprNumLit:
 			return
@@ -466,7 +474,7 @@ func (s *simplifier) optimizeUnaryExpression(expr *ast.Expression) {
 			s.changed = true
 			*expr = makeBoolExpr(val.Not().Val(), []ast.Expression{*unaryExpr.Operand})
 		}
-	case token.Plus:
+	case ast.UnaryPlus:
 		if val := ext.AsPureNumber(unaryExpr.Operand); val.Known() {
 			s.changed = true
 			if math.IsNaN(val.Val()) {
@@ -475,7 +483,7 @@ func (s *simplifier) optimizeUnaryExpression(expr *ast.Expression) {
 			}
 			*expr = ext.PreserveEffects(ast.NewNumLitExpr(&ast.NumberLiteral{Idx: unaryExpr.Idx, Value: val.Val()}), []ast.Expression{*unaryExpr.Operand})
 		}
-	case token.Minus:
+	case ast.UnaryNegation:
 		switch unaryExpr.Operand.Kind() {
 		case ast.ExprIdent:
 			switch unaryExpr.Operand.MustIdent().Name {
@@ -489,7 +497,7 @@ func (s *simplifier) optimizeUnaryExpression(expr *ast.Expression) {
 			s.changed = true
 			*expr = ast.NewNumLitExpr(&ast.NumberLiteral{Idx: operand.Idx, Value: -operand.Value})
 		}
-	case token.Void:
+	case ast.UnaryVoid:
 		if !sideEffects {
 			if numLit, ok := unaryExpr.Operand.NumLit(); ok && numLit.Value == 0 {
 				return
@@ -497,7 +505,7 @@ func (s *simplifier) optimizeUnaryExpression(expr *ast.Expression) {
 			s.changed = true
 			*unaryExpr.Operand = ast.NewNumLitExpr(&ast.NumberLiteral{Idx: unaryExpr.Operand.Idx0(), Value: 0.0})
 		}
-	case token.BitwiseNot:
+	case ast.UnaryBitwiseNot:
 		if val := ext.AsPureNumber(unaryExpr.Operand); val.Known() {
 			if _, frac := math.Modf(val.Val()); frac == 0.0 {
 				s.changed = true
@@ -507,7 +515,7 @@ func (s *simplifier) optimizeUnaryExpression(expr *ast.Expression) {
 	}
 }
 
-func (s *simplifier) performArithmeticOp(op token.Token, left, right *ast.Expression) ext.Value[float64] {
+func (s *simplifier) performArithmeticOp(op ast.BinaryOperator, left, right *ast.Expression) ext.Value[float64] {
 	tryReplace := func(v float64) ext.Value[float64] {
 		newLen := len(strconv.FormatFloat(v, 'f', -1, 64))
 		if right.Idx1() > left.Idx0() {
@@ -522,13 +530,13 @@ func (s *simplifier) performArithmeticOp(op token.Token, left, right *ast.Expres
 
 	lv := ext.AsPureNumber(left)
 	rv := ext.AsPureNumber(right)
-	if (lv.Unknown() && rv.Unknown()) || op == token.Plus &&
+	if (lv.Unknown() && rv.Unknown()) || op == ast.BinaryAddition &&
 		(!ext.GetType(left).CastToNumberOnAdd() || !ext.GetType(right).CastToNumberOnAdd()) {
 		return ext.Unknown[float64]()
 	}
 
 	switch op {
-	case token.Plus:
+	case ast.BinaryAddition:
 		if lv.Known() && rv.Known() {
 			return tryReplace(lv.Val() + rv.Val())
 		}
@@ -538,7 +546,7 @@ func (s *simplifier) performArithmeticOp(op token.Token, left, right *ast.Expres
 			return lv
 		}
 		return ext.Unknown[float64]()
-	case token.Minus:
+	case ast.BinarySubtraction:
 		if lv.Known() && rv.Known() {
 			return tryReplace(lv.Val() - rv.Val())
 		}
@@ -549,7 +557,7 @@ func (s *simplifier) performArithmeticOp(op token.Token, left, right *ast.Expres
 			return lv
 		}
 		return ext.Unknown[float64]()
-	case token.Multiply:
+	case ast.BinaryMultiplication:
 		if lv.Known() && rv.Known() {
 			return tryReplace(lv.Val() * rv.Val())
 		}
@@ -560,7 +568,7 @@ func (s *simplifier) performArithmeticOp(op token.Token, left, right *ast.Expres
 			return lv
 		}
 		return ext.Unknown[float64]()
-	case token.Slash:
+	case ast.BinaryDivision:
 		if lv.Known() && rv.Known() {
 			if rv.Val() == 0.0 {
 				return ext.Unknown[float64]()
@@ -571,7 +579,7 @@ func (s *simplifier) performArithmeticOp(op token.Token, left, right *ast.Expres
 			return lv
 		}
 		return ext.Unknown[float64]()
-	case token.Exponent:
+	case ast.BinaryExponential:
 		if rv == ext.Known(0.0) {
 			return ext.Known(1.0)
 		}
@@ -586,13 +594,13 @@ func (s *simplifier) performArithmeticOp(op token.Token, left, right *ast.Expres
 	}
 
 	switch op {
-	case token.And:
+	case ast.BinaryBitwiseAnd:
 		return tryReplace(float64(toInt32(lv.Val()) & toInt32(rv.Val())))
-	case token.Or:
+	case ast.BinaryBitwiseOR:
 		return tryReplace(float64(toInt32(lv.Val()) | toInt32(rv.Val())))
-	case token.ExclusiveOr:
+	case ast.BinaryBitwiseXOR:
 		return tryReplace(float64(toInt32(lv.Val()) ^ toInt32(rv.Val())))
-	case token.Remainder:
+	case ast.BinaryRemainder:
 		if rv.Val() == 0.0 {
 			return ext.Unknown[float64]()
 		}
@@ -609,8 +617,8 @@ func (s *simplifier) performAbstractRelCmp(left, right *ast.Expression, willNega
 			}
 		}
 	}
-	if l, ok := left.Unary(); ok && l.Operator == token.Typeof {
-		if r, ok := right.Unary(); ok && r.Operator == token.Typeof {
+	if l, ok := left.Unary(); ok && l.Operator == ast.UnaryTypeof {
+		if r, ok := right.Unary(); ok && r.Operator == ast.UnaryTypeof {
 			if lid, lok := l.Operand.Ident(); lok {
 				if rid, rok := r.Operand.Ident(); rok {
 					if lid.ToId() == rid.ToId() {
@@ -684,8 +692,8 @@ func (s *simplifier) performStrictEqCmp(left, right *ast.Expression) ext.BoolVal
 	if ext.IsNaN(left) || ext.IsNaN(right) {
 		return ext.BoolValue{Value: ext.Known(false)}
 	}
-	if l, ok := left.Unary(); ok && l.Operator == token.Typeof {
-		if r, ok := right.Unary(); ok && r.Operator == token.Typeof {
+	if l, ok := left.Unary(); ok && l.Operator == ast.UnaryTypeof {
+		if r, ok := right.Unary(); ok && r.Operator == ast.UnaryTypeof {
 			if lid, lok := l.Operand.Ident(); lok {
 				if rid, rok := r.Operand.Ident(); rok {
 					if lid.ToId() == rid.ToId() {
@@ -781,7 +789,7 @@ func (s *simplifier) VisitCallExpression(n *ast.CallExpression) {
 }
 
 func (s *simplifier) VisitExpression(n *ast.Expression) {
-	if unaryExpr, ok := n.Unary(); ok && unaryExpr.Operator == token.Delete {
+	if unaryExpr, ok := n.Unary(); ok && unaryExpr.Operator == ast.UnaryDelete {
 		return
 	}
 	n.VisitChildrenWith(s)
@@ -793,7 +801,7 @@ func (s *simplifier) VisitExpression(n *ast.Expression) {
 		if len(n.MustSequence().Sequence) == 0 {
 			return
 		}
-	case ast.ExprUnary, ast.ExprBinary, ast.ExprMember, ast.ExprConditional, ast.ExprArrLit, ast.ExprObjLit, ast.ExprNew:
+	case ast.ExprUnary, ast.ExprBinary, ast.ExprLogical, ast.ExprMember, ast.ExprConditional, ast.ExprArrLit, ast.ExprObjLit, ast.ExprNew:
 	default:
 		return
 	}
@@ -803,6 +811,8 @@ func (s *simplifier) VisitExpression(n *ast.Expression) {
 		s.optimizeUnaryExpression(n)
 	case ast.ExprBinary:
 		s.optimizeBinaryExpression(n)
+	case ast.ExprLogical:
+		s.optimizeLogicalExpression(n)
 	case ast.ExprMember:
 		s.optimizeMemberExpression(n)
 	case ast.ExprConditional:

@@ -2,7 +2,6 @@ package deadcode
 
 import (
 	"github.com/t14raptor/go-fast/ast"
-	"github.com/t14raptor/go-fast/token"
 )
 
 type scopeKind int
@@ -169,7 +168,7 @@ func (a *analyzer) VisitExpression(n *ast.Expression) {
 }
 
 func (a *analyzer) VisitAssignExpression(n *ast.AssignExpression) {
-	if ident, ok := n.Left.Ident(); ok && n.Operator == token.Assign {
+	if ident, ok := n.Left.Ident(); ok && n.Operator == ast.AssignmentAssign {
 		a.Add(ident.ToId(), true)
 		n.Right.VisitWith(a)
 	} else {

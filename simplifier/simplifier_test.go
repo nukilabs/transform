@@ -502,10 +502,10 @@ func TestFoldLogicalOp1(t *testing.T) {
 
 func TestFoldLogicalOp2(t *testing.T) {
 	fold("x = function(){} && x", "x = x", t)
-	fold("x = true && function(){}", "x = function () {}", t)
+	fold("x = true && function(){}", "x = function() {}", t)
 	fold(
 		"x = [(function(){alert(x)})()] && x",
-		"x = ((function () { alert(x); })(), x)",
+		"x = ((function() { alert(x); })(), x)",
 		t,
 	)
 }
@@ -808,8 +808,8 @@ func TestFoldComparison4(t *testing.T) {
 	fold("[0] == true", "[0] == true", t)
 	fold("[1] == false", "[1] == false", t)
 	fold("[1] == true", "[1] == true", t)
-	fold("({}) == false", "({}) == false", t)
-	fold("({}) == true", "({}) == true", t)
+	fold("({}) == false", "{} == false", t)
+	fold("({}) == true", "{} == true", t)
 }
 
 func TestFoldGetElem1(t *testing.T) {
@@ -936,7 +936,7 @@ func TestFoldInstanceOf(t *testing.T) {
 
 	// These would require type information to fold
 	fold("[] instanceof Foo", "[] instanceof Foo", t)
-	fold("({}) instanceof Foo", "({}) instanceof Foo", t)
+	fold("({}) instanceof Foo", "{} instanceof Foo", t)
 
 	fold("(function() {}) instanceof Object", "true", t)
 

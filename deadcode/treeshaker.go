@@ -7,8 +7,8 @@ import (
 	"github.com/nukilabs/transform/internal/cfg"
 	"github.com/t14raptor/go-fast/ast"
 	"github.com/t14raptor/go-fast/ast/ext"
+	scanner "github.com/t14raptor/go-fast/parser/scanner/token"
 	"github.com/t14raptor/go-fast/resolver"
-	"github.com/t14raptor/go-fast/token"
 )
 
 // Eliminate removes dead code from the AST.
@@ -133,16 +133,16 @@ func (ts *treeShaker) VisitClassDeclaration(n *ast.ClassDeclaration) {
 func (ts *treeShaker) VisitExpression(n *ast.Expression) {
 	n.VisitChildrenWith(ts)
 
-	if binExpr, ok := n.Binary(); ok {
-		switch binExpr.Operator {
-		case token.LogicalAnd:
-			if val := ext.AsPureBool(binExpr.Left); val.Known() && !val.Val() {
-				*n = *binExpr.Left
+	if logExpr, ok := n.Logical(); ok {
+		switch logExpr.Operator {
+		case ast.LogicalAnd:
+			if val := ext.AsPureBool(logExpr.Left); val.Known() && !val.Val() {
+				*n = *logExpr.Left
 				ts.changed = true
 			}
-		case token.LogicalOr:
-			if val := ext.AsPureBool(binExpr.Left); val.Known() && val.Val() {
-				*n = *binExpr.Left
+		case ast.LogicalOr:
+			if val := ext.AsPureBool(logExpr.Left); val.Known() && val.Val() {
+				*n = *logExpr.Left
 				ts.changed = true
 			}
 		}
@@ -159,7 +159,7 @@ func (ts *treeShaker) VisitStatement(n *ast.Statement) {
 			// If all name is droppable, do so.
 			if slices.ContainsFunc(varDecl.List, func(v ast.VariableDeclarator) bool {
 				if ident, ok := v.Target.Ident(); ok {
-					return !ts.CanDropBinding(ident.ToId(), varDecl.Token == token.Var)
+					return !ts.CanDropBinding(ident.ToId(), varDecl.Token == scanner.Var)
 				}
 				return true
 			}) {
@@ -187,7 +187,7 @@ func (ts *treeShaker) VisitStatement(n *ast.Statement) {
 }
 
 func (ts *treeShaker) VisitUnaryExpression(n *ast.UnaryExpression) {
-	if n.Operator == token.Delete {
+	if n.Operator == ast.UnaryDelete {
 		return
 	}
 	n.VisitChildrenWith(ts)
@@ -202,7 +202,7 @@ func (ts *treeShaker) VisitVariableDeclaration(n *ast.VariableDeclaration) {
 			if n.List[i].Initializer != nil {
 				canDrop = !ext.MayHaveSideEffects(n.List[i].Initializer)
 			}
-			if canDrop && ts.CanDropBinding(ident.ToId(), n.Token == token.Var) {
+			if canDrop && ts.CanDropBinding(ident.ToId(), n.Token == scanner.Var) {
 				ts.changed = true
 				n.List = slices.Delete(n.List, i, i+1)
 			}
