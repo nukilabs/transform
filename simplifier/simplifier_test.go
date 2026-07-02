@@ -861,7 +861,7 @@ func TestFoldObjectSpread(t *testing.T) {
 	fold("x = {a, ...{}, b}", "x = { a, b }", t)
 	fold("x = {...{a, b}, c, ...{d, e}}", "x = { a, b, c, d, e }", t)
 	fold("x = {...{...{a}, b}, c}", "x = { a, b, c }", t)
-	fold("({...{x}} = obj)", "({...{ x }} = obj)", t)
+	fold("({a, ...rest} = obj)", "({a, ...rest} = obj)", t)
 }
 
 func TestFoldComplex(t *testing.T) {
