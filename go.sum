@@ -6,3 +6,5 @@ github.com/t14raptor/go-fast v0.0.8-0.20260402145448-0e88701f515f h1:W37oZx0UgqV
 github.com/t14raptor/go-fast v0.0.8-0.20260402145448-0e88701f515f/go.mod h1:IyzuItbJu1DY1z+xBRE9Bk/jCvaJEFG/yeSupi/2HDU=
 github.com/t14raptor/go-fast v0.0.9-0.20260424215027-16d89e26c2a8 h1:W6qVZdW2ckjUvsBUB04aFtimuYnwH9D5Aqs6UIqpzJE=
 github.com/t14raptor/go-fast v0.0.9-0.20260424215027-16d89e26c2a8/go.mod h1:IyzuItbJu1DY1z+xBRE9Bk/jCvaJEFG/yeSupi/2HDU=
+github.com/t14raptor/go-fast v0.0.9-0.20260608220523-56af0aa51c48 h1:YBZ4XTa8QJkNMQ1+bhcEyCmy3ssTC5u0yQrPDIkMgo4=
+github.com/t14raptor/go-fast v0.0.9-0.20260608220523-56af0aa51c48/go.mod h1:IyzuItbJu1DY1z+xBRE9Bk/jCvaJEFG/yeSupi/2HDU=

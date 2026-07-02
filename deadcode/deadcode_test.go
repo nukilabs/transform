@@ -11,7 +11,7 @@ import (
 )
 
 func dce(in string) (string, error) {
-	p, err := parser.ParseFile(in)
+	p, err := parser.Parse(in)
 	if err != nil {
 		return "", err
 	}

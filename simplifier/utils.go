@@ -3,6 +3,7 @@ package simplifier
 import (
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf16"
 
@@ -12,10 +13,10 @@ import (
 
 func isNonObj(n *ast.Expression) bool {
 	switch n.Kind() {
-	case ast.ExprStrLit, ast.ExprNumLit, ast.ExprNullLit, ast.ExprBoolLit:
+	case ast.ExprStringLit, ast.ExprNumberLit, ast.ExprNullLit, ast.ExprBoolLit:
 		return true
-	case ast.ExprIdent:
-		name := n.MustIdent().Name
+	case ast.ExprIdentifier:
+		name := n.MustIdentifier().Name
 		if name == "undefined" || name == "Infinity" || name == "NaN" {
 			return true
 		}
@@ -30,7 +31,7 @@ func isNonObj(n *ast.Expression) bool {
 
 func isObj(n *ast.Expression) bool {
 	switch n.Kind() {
-	case ast.ExprArrLit, ast.ExprObjLit, ast.ExprFuncLit, ast.ExprNew:
+	case ast.ExprArrayLit, ast.ExprObjectLit, ast.ExprFuncLit, ast.ExprNew:
 		return true
 	default:
 		return false
@@ -39,8 +40,8 @@ func isObj(n *ast.Expression) bool {
 
 func directnessMaters(n *ast.Expression) bool {
 	switch n.Kind() {
-	case ast.ExprIdent:
-		return n.MustIdent().Name == "eval"
+	case ast.ExprIdentifier:
+		return n.MustIdentifier().Name == "eval"
 	case ast.ExprMember:
 		return true
 	}
@@ -104,21 +105,21 @@ func getKeyValue(props []ast.Property, key string) *ast.Expression {
 		case ast.PropShort:
 			short := prop.MustShort()
 			if short.Name.Name == key {
-				e := ast.NewIdentExpr(short.Name)
+				e := ast.NewIdentifierExpr(short.Name)
 				return &e
 			}
-		case ast.PropKeyed:
-			keyed := prop.MustKeyed()
-			if key != "__proto__" && ext.PropNameEq(keyed.Key, "__proto__") {
+		case ast.PropKeyValue:
+			keyed := prop.MustKeyValue()
+			if key != "__proto__" && propNameEq(keyed.Key, "__proto__") {
 				// If __proto__ is defined, we need to check the contents of it,
 				// as well as any nested __proto__ objects
-				if obj, ok := keyed.Value.ObjLit(); ok {
+				if obj, ok := keyed.Value.ObjectLit(); ok {
 					if v := getKeyValue(obj.Value, key); v != nil {
 						return v
 					}
 				}
 				return nil
-			} else if ext.PropNameEq(keyed.Key, key) {
+			} else if propNameEq(keyed.Key, key) {
 				return keyed.Value
 			}
 		}
@@ -129,6 +130,16 @@ func getKeyValue(props []ast.Property, key string) *ast.Expression {
 
 func ptrExpr(e ast.Expression) *ast.Expression {
 	return &e
+}
+
+func propNameEq(key *ast.PropertyName, name string) bool {
+	switch key.Kind() {
+	case ast.PropNameStringLit:
+		return key.MustStringLit().Value == name
+	case ast.PropNameNumberLit:
+		return strconv.FormatFloat(key.MustNumberLit().Value, 'f', -1, 64) == name
+	}
+	return false
 }
 
 // toInt32 implements JavaScript's ToInt32 abstract operation.

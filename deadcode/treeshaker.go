@@ -7,7 +7,6 @@ import (
 	"github.com/nukilabs/transform/internal/cfg"
 	"github.com/t14raptor/go-fast/ast"
 	"github.com/t14raptor/go-fast/ast/ext"
-	scanner "github.com/t14raptor/go-fast/parser/scanner/token"
 	"github.com/t14raptor/go-fast/resolver"
 )
 
@@ -84,7 +83,7 @@ func (ts *treeShaker) VisitStatements(n *ast.Statements) {
 func (ts *treeShaker) VisitAssignExpression(n *ast.AssignExpression) {
 	n.VisitChildrenWith(ts)
 
-	if ident, ok := n.Left.Ident(); ok {
+	if ident, ok := n.Left.Identifier(); ok {
 		if ts.CanDropAssignmentTo(ident.ToId(), false) && !ext.MayHaveSideEffects(n.Right) {
 			ts.changed = true
 			ts.remove.Store(true)
@@ -111,11 +110,11 @@ func (ts *treeShaker) VisitClassDeclaration(n *ast.ClassDeclaration) {
 
 		if slices.ContainsFunc(n.Class.Body, func(elem ast.ClassElement) bool {
 			switch elem.Kind() {
-			case ast.ClassElemMethod:
-				return elem.MustMethod().Computed
-			case ast.ClassElemField:
-				field := elem.MustField()
-				return field.Computed || (field.Initializer != nil && ext.MayHaveSideEffects(field.Initializer))
+			case ast.ClassElemMethodDef:
+				return elem.MustMethodDef().Key.IsComputed()
+			case ast.ClassElemFieldDef:
+				field := elem.MustFieldDef()
+				return field.Key.IsComputed() || (field.Initializer != nil && ext.MayHaveSideEffects(field.Initializer))
 			case ast.ClassElemStaticBlock:
 				return true
 			default:
@@ -158,8 +157,8 @@ func (ts *treeShaker) VisitStatement(n *ast.Statement) {
 		} else {
 			// If all name is droppable, do so.
 			if slices.ContainsFunc(varDecl.List, func(v ast.VariableDeclarator) bool {
-				if ident, ok := v.Target.Ident(); ok {
-					return !ts.CanDropBinding(ident.ToId(), varDecl.Token == scanner.Var)
+				if ident, ok := v.Target.Identifier(); ok {
+					return !ts.CanDropBinding(ident.ToId(), varDecl.Kind == ast.VarKindVar)
 				}
 				return true
 			}) {
@@ -197,12 +196,12 @@ func (ts *treeShaker) VisitVariableDeclaration(n *ast.VariableDeclaration) {
 	for i := len(n.List) - 1; i >= 0; i-- {
 		n.List[i].VisitWith(ts)
 
-		if ident, ok := n.List[i].Target.Ident(); ok {
+		if ident, ok := n.List[i].Target.Identifier(); ok {
 			canDrop := true
 			if n.List[i].Initializer != nil {
 				canDrop = !ext.MayHaveSideEffects(n.List[i].Initializer)
 			}
-			if canDrop && ts.CanDropBinding(ident.ToId(), n.Token == scanner.Var) {
+			if canDrop && ts.CanDropBinding(ident.ToId(), n.Kind == ast.VarKindVar) {
 				ts.changed = true
 				n.List = slices.Delete(n.List, i, i+1)
 			}
