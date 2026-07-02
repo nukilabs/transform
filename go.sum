@@ -2,5 +2,5 @@ github.com/nukilabs/ftoa v1.0.0 h1:AiCb9begI2rwjDQm7/H+ce1ctdkixnOOw/bpurZTySc=
 github.com/nukilabs/ftoa v1.0.0/go.mod h1:ZJE2wT+SozGrxoj3oRB6Q6Kl3IMpCzdNOhymdmLGrHU=
 github.com/nukilabs/unicodeid v0.1.0 h1:+CtAaV9CkgVA3Jy9V29yb57DPCLsnWUJrP9LxhkD89w=
 github.com/nukilabs/unicodeid v0.1.0/go.mod h1:3qxjfcmcgVYBg9dMRNSniAVfqxwOed7JU7P2rPkJrRg=
-github.com/t14raptor/go-fast v0.0.8 h1:rH3lTUVerIPWv2cIb/fUEx8vZA3KKye/5kVIunrr64E=
-github.com/t14raptor/go-fast v0.0.8/go.mod h1:IyzuItbJu1DY1z+xBRE9Bk/jCvaJEFG/yeSupi/2HDU=
+github.com/t14raptor/go-fast v0.1.0 h1:KqwQE+MNvC1NKhoAacqP87NrNOFavvWSP2m6BtCXxsk=
+github.com/t14raptor/go-fast v0.1.0/go.mod h1:IyzuItbJu1DY1z+xBRE9Bk/jCvaJEFG/yeSupi/2HDU=

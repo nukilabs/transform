@@ -7,7 +7,6 @@ import (
 	"github.com/nukilabs/transform/internal/cfg"
 	"github.com/t14raptor/go-fast/ast"
 	"github.com/t14raptor/go-fast/ast/ext"
-	"github.com/t14raptor/go-fast/parser/scanner/token"
 	"github.com/t14raptor/go-fast/resolver"
 )
 
@@ -70,11 +69,11 @@ func (ts *treeShaker) VisitStatements(n *ast.Statements) {
 			continue
 		}
 
-		switch stmt := (*n)[i].Stmt.(type) {
-		case *ast.EmptyStatement:
+		switch (*n)[i].Kind() {
+		case ast.StmtEmpty:
 			*n = slices.Delete(*n, i, i+1)
-		case *ast.BlockStatement:
-			if len(stmt.List) == 0 {
+		case ast.StmtBlock:
+			if len((*n)[i].MustBlock().List) == 0 {
 				*n = slices.Delete(*n, i, i+1)
 			}
 		}
@@ -84,7 +83,7 @@ func (ts *treeShaker) VisitStatements(n *ast.Statements) {
 func (ts *treeShaker) VisitAssignExpression(n *ast.AssignExpression) {
 	n.VisitChildrenWith(ts)
 
-	if ident, ok := n.Left.Expr.(*ast.Identifier); ok {
+	if ident, ok := n.Left.Identifier(); ok {
 		if ts.CanDropAssignmentTo(ident.ToId(), false) && !ext.MayHaveSideEffects(n.Right) {
 			ts.changed = true
 			ts.remove.Store(true)
@@ -110,12 +109,13 @@ func (ts *treeShaker) VisitClassDeclaration(n *ast.ClassDeclaration) {
 		}
 
 		if slices.ContainsFunc(n.Class.Body, func(elem ast.ClassElement) bool {
-			switch elem := elem.Element.(type) {
-			case *ast.MethodDefinition:
-				return elem.Computed
-			case *ast.FieldDefinition:
-				return elem.Computed || (elem.Initializer != nil && ext.MayHaveSideEffects(elem.Initializer))
-			case *ast.ClassStaticBlock:
+			switch elem.Kind() {
+			case ast.ClassElemMethodDef:
+				return elem.MustMethodDef().Key.IsComputed()
+			case ast.ClassElemFieldDef:
+				field := elem.MustFieldDef()
+				return field.Key.IsComputed() || (field.Initializer != nil && ext.MayHaveSideEffects(field.Initializer))
+			case ast.ClassElemStaticBlock:
 				return true
 			default:
 				return false
@@ -132,17 +132,16 @@ func (ts *treeShaker) VisitClassDeclaration(n *ast.ClassDeclaration) {
 func (ts *treeShaker) VisitExpression(n *ast.Expression) {
 	n.VisitChildrenWith(ts)
 
-	switch expr := n.Expr.(type) {
-	case *ast.LogicalExpression:
-		switch expr.Operator {
+	if logExpr, ok := n.Logical(); ok {
+		switch logExpr.Operator {
 		case ast.LogicalAnd:
-			if val := ext.AsPureBool(expr.Left); val.Known() && !val.Val() {
-				n.Expr = expr.Left.Expr
+			if val := ext.AsPureBool(logExpr.Left); val.Known() && !val.Val() {
+				*n = *logExpr.Left
 				ts.changed = true
 			}
 		case ast.LogicalOr:
-			if val := ext.AsPureBool(expr.Left); val.Known() && val.Val() {
-				n.Expr = expr.Left.Expr
+			if val := ext.AsPureBool(logExpr.Left); val.Known() && val.Val() {
+				*n = *logExpr.Left
 				ts.changed = true
 			}
 		}
@@ -152,14 +151,14 @@ func (ts *treeShaker) VisitExpression(n *ast.Expression) {
 func (ts *treeShaker) VisitStatement(n *ast.Statement) {
 	n.VisitChildrenWith(ts)
 
-	if varDecl, ok := n.Stmt.(*ast.VariableDeclaration); ok {
+	if varDecl, ok := n.VarDecl(); ok {
 		if len(varDecl.List) == 0 {
 			ts.remove.Store(true)
 		} else {
 			// If all name is droppable, do so.
 			if slices.ContainsFunc(varDecl.List, func(v ast.VariableDeclarator) bool {
-				if ident, ok := v.Target.Target.(*ast.Identifier); ok {
-					return !ts.CanDropBinding(ident.ToId(), varDecl.Token == token.Var)
+				if ident, ok := v.Target.Identifier(); ok {
+					return !ts.CanDropBinding(ident.ToId(), varDecl.Kind == ast.VarKindVar)
 				}
 				return true
 			}) {
@@ -174,13 +173,13 @@ func (ts *treeShaker) VisitStatement(n *ast.Statement) {
 			}
 
 			if len(exprs) == 0 {
-				n.Stmt = &ast.EmptyStatement{}
+				*n = ast.NewEmptyStmt(&ast.EmptyStatement{})
 			} else if len(exprs) == 1 {
-				n.Stmt = &ast.ExpressionStatement{Expression: &exprs[0]}
+				*n = ast.NewExpressionStmt(&ast.ExpressionStatement{Expression: &exprs[0]})
 			} else {
-				n.Stmt = &ast.ExpressionStatement{Expression: &ast.Expression{
-					Expr: &ast.SequenceExpression{Sequence: exprs},
-				}}
+				seq := &ast.SequenceExpression{Sequence: exprs}
+				seqExpr := ast.NewSequenceExpr(seq)
+				*n = ast.NewExpressionStmt(&ast.ExpressionStatement{Expression: &seqExpr})
 			}
 		}
 	}
@@ -197,12 +196,12 @@ func (ts *treeShaker) VisitVariableDeclaration(n *ast.VariableDeclaration) {
 	for i := len(n.List) - 1; i >= 0; i-- {
 		n.List[i].VisitWith(ts)
 
-		if ident, ok := n.List[i].Target.Target.(*ast.Identifier); ok {
+		if ident, ok := n.List[i].Target.Identifier(); ok {
 			canDrop := true
 			if n.List[i].Initializer != nil {
 				canDrop = !ext.MayHaveSideEffects(n.List[i].Initializer)
 			}
-			if canDrop && ts.CanDropBinding(ident.ToId(), n.Token == token.Var) {
+			if canDrop && ts.CanDropBinding(ident.ToId(), n.Kind == ast.VarKindVar) {
 				ts.changed = true
 				n.List = slices.Delete(n.List, i, i+1)
 			}
