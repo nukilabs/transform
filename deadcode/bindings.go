@@ -6,6 +6,10 @@ type bindingCollector struct {
 	ast.NoopVisitor
 	only     *ast.ScopeContext
 	bindings map[ast.Id]struct{}
+	// inAssignTarget is set while visiting the target of an assignment or a
+	// for-in/of head without a declaration. Identifiers there refer to
+	// existing bindings (or implicit globals) and do not declare anything.
+	inAssignTarget bool
 }
 
 func (v *bindingCollector) add(id ast.Id) {
@@ -27,9 +31,38 @@ func (v *bindingCollector) VisitFunctionDeclaration(n *ast.FunctionDeclaration) 
 
 func (v *bindingCollector) VisitPattern(n *ast.Pattern) {
 	n.VisitChildrenWith(v)
-	if ident, ok := n.Identifier(); ok {
+	if ident, ok := n.Identifier(); ok && !v.inAssignTarget {
 		v.add(ident.ToId())
 	}
+}
+
+func (v *bindingCollector) VisitAssignExpression(n *ast.AssignExpression) {
+	v.visitTarget(n.Left)
+	n.Right.VisitWith(v)
+}
+
+func (v *bindingCollector) VisitForInto(n *ast.ForInto) {
+	if pat, ok := n.Pattern(); ok {
+		v.visitTarget(pat)
+		return
+	}
+	n.VisitChildrenWith(v)
+}
+
+// VisitExpression clears inAssignTarget so that default values and computed
+// keys inside an assignment target are still searched for declarations.
+func (v *bindingCollector) VisitExpression(n *ast.Expression) {
+	old := v.inAssignTarget
+	v.inAssignTarget = false
+	n.VisitChildrenWith(v)
+	v.inAssignTarget = old
+}
+
+func (v *bindingCollector) visitTarget(n *ast.Pattern) {
+	old := v.inAssignTarget
+	v.inAssignTarget = true
+	n.VisitWith(v)
+	v.inAssignTarget = old
 }
 
 // collectDeclarations collects binding identifiers.
