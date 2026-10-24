@@ -89,3 +89,11 @@ func TestEmptyBlockStmt(t *testing.T) {
 func TestObject(t *testing.T) {
 	test(`function a() { } var b = { a: a }; console.log(b.a);`, `function a() {} var b = { a: a }; console.log(b.a);`, t)
 }
+
+func TestAssignmentToUndeclared(t *testing.T) {
+	test(`x = 1;`, `x = 1;`, t)
+	test(`function f() { y = 2; } f();`, `function f() { y = 2; } f();`, t)
+	test(`[x] = [1];`, `([x] = [1]);`, t)
+	test(`for (x of [1]) {}`, `for (x of [1]) {}`, t)
+	test(`x = function () { var a = 1; };`, `x = function() {};`, t)
+}
