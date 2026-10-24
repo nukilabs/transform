@@ -97,3 +97,10 @@ func TestAssignmentToUndeclared(t *testing.T) {
 	test(`for (x of [1]) {}`, `for (x of [1]) {}`, t)
 	test(`x = function () { var a = 1; };`, `x = function() {};`, t)
 }
+
+func TestShorthandPattern(t *testing.T) {
+	test(`var x; ({x} = o);`, `var x; ({x} = o);`, t)
+	test(`"use strict"; var x; ({x = 1} = o);`, `"use strict"; var x; ({x = 1} = o);`, t)
+	test(`var x; for ({x} of o) {}`, `var x; for ({x} of o) {}`, t)
+	test(`var {x} = o; x = 1;`, `var {x} = o;`, t)
+}

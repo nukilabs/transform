@@ -36,6 +36,15 @@ func (v *bindingCollector) VisitPattern(n *ast.Pattern) {
 	}
 }
 
+// VisitPatternShorthand handles `{x}` in object patterns, whose name is a bare
+// Identifier rather than a Pattern.
+func (v *bindingCollector) VisitPatternShorthand(n *ast.PatternShorthand) {
+	n.VisitChildrenWith(v)
+	if !v.inAssignTarget {
+		v.add(n.Name.ToId())
+	}
+}
+
 func (v *bindingCollector) VisitAssignExpression(n *ast.AssignExpression) {
 	v.visitTarget(n.Left)
 	n.Right.VisitWith(v)

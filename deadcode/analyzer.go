@@ -218,6 +218,13 @@ func (a *analyzer) VisitPattern(n *ast.Pattern) {
 	}
 }
 
+func (a *analyzer) VisitPatternShorthand(n *ast.PatternShorthand) {
+	n.VisitChildrenWith(a)
+	if !a.inVarDecl {
+		a.Add(n.Name.ToId(), true)
+	}
+}
+
 func (a *analyzer) VisitProperty(n *ast.Property) {
 	n.VisitChildrenWith(a)
 	if short, ok := n.Short(); ok {
