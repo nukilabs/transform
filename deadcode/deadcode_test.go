@@ -104,3 +104,10 @@ func TestShorthandPattern(t *testing.T) {
 	test(`var x; for ({x} of o) {}`, `var x; for ({x} of o) {}`, t)
 	test(`var {x} = o; x = 1;`, `var {x} = o;`, t)
 }
+
+// A compound assignment reads its target, so the target stays used and the
+// assignment stays, wherever its value goes.
+func TestCompoundAssignmentReadsItsTarget(t *testing.T) {
+	test(`function f(a) { var s = "["; s += a; return s += "]"; } f(1);`, `function f(a) { var s = "["; s += a; return s += "]"; } f(1);`, t)
+	test(`function g(y) { return h(y |= 0, 1); } g(2);`, `function g(y) { return h(y |= 0, 1); } g(2);`, t)
+}
