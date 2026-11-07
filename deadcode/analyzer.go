@@ -168,10 +168,17 @@ func (a *analyzer) VisitExpression(n *ast.Expression) {
 }
 
 func (a *analyzer) VisitAssignExpression(n *ast.AssignExpression) {
-	if ident, ok := n.Left.Identifier(); ok && n.Operator == ast.AssignmentAssign {
+	ident, ok := n.Left.Identifier()
+	switch {
+	case ok && n.Operator == ast.AssignmentAssign:
 		a.Add(ident.ToId(), true)
 		n.Right.VisitWith(a)
-	} else {
+	case ok:
+		// A compound assignment (x += y, x ||= y, ...) also reads x. The target
+		// is a Pattern, which VisitExpression never sees, so count the read here.
+		a.Add(ident.ToId(), false)
+		n.Right.VisitWith(a)
+	default:
 		n.VisitChildrenWith(a)
 	}
 }
